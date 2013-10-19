@@ -1,0 +1,3 @@
+[submodule "supersimplemediawiki"]
+	path = supersimplemediawiki
+	url = https://github.com/legoktm/supersimplemediawiki.git
