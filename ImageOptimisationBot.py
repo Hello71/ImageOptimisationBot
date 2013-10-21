@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
 
-import mw, config, requests, os, shutil, subprocess, tempfile
+import mw, config, hashlib, re, requests, os, shutil, subprocess, sys, tempfile
 import code
 
 wiki = mw.Wiki(config.API_PHP)
 
-print("Logging into %s..." % config.API_PHP)
-wiki.login(config.USERNAME, config.PASSWORD)
+sys.stderr.write('Logging into %s...\n' % config.API_PHP)
+#wiki.login(config.USERNAME, config.PASSWORD)
 
 # obtain
-print("Fetching pages from %s..." % config.API_PHP)
-pages = wiki.request({
-  'action': 'query',
-  'prop': 'imageinfo',
-  'iiprop': '|'.join([ 'user', 'url', 'mime' ]),
-  'generator': 'categorymembers',
-  'gcmtitle': config.CATEGORY,
-})['query']['pages']
+sys.stderr.write('Fetching pages from %s...\n' % config.API_PHP)
+try:
+  pages = wiki.request({
+    'action': 'query',
+    'prop': 'imageinfo',
+    'iiprop': '|'.join([ 'user', 'url', 'mime' ]),
+    'generator': 'categorymembers',
+    'gcmtitle': config.CATEGORY,
+  })['query']['pages']
+except mw.SSMWError as e:
+  if e.args[0] == '[]':
+    sys.stderr.write('!!! %s is empty !!!\n' % config.CATEGORY)
+  raise e
 
 images = {
   'image/png': [],
@@ -26,9 +31,12 @@ images = {
 
 # download & sort
 for (pageid, image) in pages.items():
-  imageinfo = image['imageinfo'][0]
+  imageinfo = image['imageinfo']
+  if not imageinfo:
+    next
+  imageinfo = imageinfo[0]
   url = imageinfo['url']
-  print("Fetching %s..." % url)
+  sys.stderr.write('Fetching %s...\n' % url)
   r = requests.get(url, stream=True)
 
   f = tempfile.NamedTemporaryFile(suffix=os.path.splitext(image['title'])[1], delete=False)
@@ -41,38 +49,55 @@ for (pageid, image) in pages.items():
 
 for mime in images:
   optimisers = {
-    'image/png': [['optipng'] + config.OPTIPNG_OPTIONS, ['zopflipng'] + config.ZOPFLIPNG_OPTIONS],
-    'image/gif': [['gifsicle', '--batch'] + config.GIFSICLE_OPTIONS],
-    'image/jpeg': [['jpegoptim'] + config.JPEGOPTIM_OPTIONS],
+    'image/png': [[config.OPTIPNG] + config.OPTIPNG_OPTIONS, [config.ZOPFLIPNG, '-y', '--prefix'] + config.ZOPFLIPNG_OPTIONS],
+    'image/gif': [[config.GIFSICLE, '--batch'] + config.GIFSICLE_OPTIONS],
+    'image/jpeg': [[config.JPEGOPTIM] + config.JPEGOPTIM_OPTIONS],
   }
 
   if images[mime]:
+    sys.stderr.write('Optimising %s images' % mime)
     for optimiser in optimisers[mime]:
       if subprocess.call(optimiser + [image[1] for image in images[mime]]):
-        raise Exception("Optimising failed")
+        raise Exception('Optimising failed')
 
 # upload
 
-tokens = wiki.request({
+token = wiki.request({
   'action': 'query',
-  'prop': 'info',
+  'prop': 'info|revisions',
+  'rvprop': 'content',
   'intoken': 'edit',
   'pageids': pages.keys(),
 })['query']['pages']
 
 for mime in images:
   for (image, f) in images[mime]:
-    print("Uploading %s to %s..." % (image['title'], f))
+    sys.stderr.write('Uploading %s to %s...\n' % (f, image['title']))
 
     pageid = str(image['pageid'])
-    wiki.request(data={
+    upload = wiki.request(data={
       'action': 'upload',
       'filename': image['title'],
       'comment': config.COMMENT,
       'text': config.COMMENT,
       'token': tokens[pageid]['edittoken'],
-      'ignorewarnings': 1
+      'ignorewarnings': True,
     }, post=True, files={
       'file': open(f, 'rb')
+    })['upload']
+
+    r = requests.get(upload['imageinfo']['descriptionurl'], params={
+      'action': 'raw'
     })
+
+    text = re.sub(config.REMOVE, '', r.text, flags=re.I)
+
+    edit = wiki.request(data={
+      'action': 'edit',
+      'pageid': image['pageid'],
+      'text': text,
+      'bot': True,
+      'nocreate': True,
+      'token': tokens[pageid]['edittoken'],
+    }, post=True)
 
