@@ -31,10 +31,9 @@ images = {
 
 # download & sort
 for (pageid, image) in pages.items():
-  imageinfo = image['imageinfo']
-  if not imageinfo:
-    next
-  imageinfo = imageinfo[0]
+  if not 'imageinfo' in image:
+    continue
+  imageinfo = image['imageinfo'][0]
   url = imageinfo['url']
   sys.stderr.write('Fetching %s...\n' % url)
   r = requests.get(url, stream=True)
@@ -55,7 +54,7 @@ for mime in images:
   }
 
   if images[mime]:
-    sys.stderr.write('Optimising %s images' % mime)
+    sys.stderr.write('Optimising %s images\n' % mime)
     for optimiser in optimisers[mime]:
       if subprocess.call(optimiser + [image[1] for image in images[mime]]):
         raise Exception('Optimising failed')

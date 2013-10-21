@@ -1,0 +1,17 @@
+WIKI = 'http://runescape.wikia.com/'
+API_PHP = WIKI + "api.php"
+INDEX_PHP = WIKI + "index.php"
+USERNAME = 'Image optimisation bot'
+PASSWORD = 'ee6042d1f224e276389570a32aceb76b'
+CATEGORY = 'Category:Images needing compression'
+
+OPTIPNG = ['optipng']
+OPTIPNG_OPTIONS = ['-o7']
+ZOPFLIPNG = ['/home/alex/zopfli/zopflipng']
+ZOPFLIPNG_OPTIONS = ['-m']
+GIFSICLE = ['gifsicle']
+GIFSICLE_OPTIONS = ['-O3', '--no-comments', '--no-names']
+JPEGOPTIM = ['jpegoptim']
+JPEGOPTIM_OPTIONS = ['--strip-all']
+
+COMMENT = 'Compressed image'
