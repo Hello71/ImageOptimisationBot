@@ -5,8 +5,8 @@ import code
 
 wiki = mw.Wiki(config.API_PHP)
 
-sys.stderr.write('Logging into %s...\n' % config.API_PHP)
-#wiki.login(config.USERNAME, config.PASSWORD)
+sys.stderr.write('Logging into %s...\n' % config.WIKI)
+wiki.login(config.USERNAME, config.PASSWORD)
 
 # obtain
 sys.stderr.write('Fetching pages from %s...\n' % config.API_PHP)
@@ -56,12 +56,13 @@ for mime in images:
   if images[mime]:
     sys.stderr.write('Optimising %s images\n' % mime)
     for optimiser in optimisers[mime]:
+      print(optimiser + [image[1] for image in images[mime]])
       if subprocess.call(optimiser + [image[1] for image in images[mime]]):
         raise Exception('Optimising failed')
 
 # upload
 
-token = wiki.request({
+tokens = wiki.request({
   'action': 'query',
   'prop': 'info|revisions',
   'rvprop': 'content',
