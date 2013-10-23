@@ -1,9 +1,11 @@
-MediaWiki bot to automatically download and optimise images.
+MediaWiki bot to automatically download and optimise images, inspired by [[User:Image optimisation bot]] on the RuneScape Wiki. [0][1]
 
 Copy config.py.example to config.py and modify as appropriate.
 
-Requires requests library. [0]
+Requires requests library. [2]
 
 Only tested on Python 3.3, but appears to function with 2.7 as well.
 
-[0] http://docs.python-requests.org/en/latest/
+[0] https://github.com/Nebuleon/mediawikitools/blob/master/src/com/wikia/runescape/ImageOptimisationBot.java
+[1] http://runescape.wikia.com/wiki/User:Image_optimisation_bot
+[2] http://docs.python-requests.org/en/latest/
