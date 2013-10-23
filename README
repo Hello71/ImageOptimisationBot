@@ -1,0 +1,9 @@
+MediaWiki bot to automatically download and optimise images.
+
+Copy config.py.example to config.py and modify as appropriate.
+
+Requires requests library. [0]
+
+Only tested on Python 3.3, but appears to function with 2.7 as well.
+
+[0] http://docs.python-requests.org/en/latest/

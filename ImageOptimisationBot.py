@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-import mw, config, hashlib, re, requests, os, shutil, subprocess, sys, tempfile
-import code
+import mw, config, multiprocessing, re, requests, os, shutil, subprocess, sys, tempfile
 
 wiki = mw.Wiki(config.API_PHP)
 
@@ -13,8 +12,10 @@ sys.stderr.write('Fetching pages from %s...\n' % config.API_PHP)
 try:
   pages = wiki.request({
     'action': 'query',
-    'prop': 'imageinfo',
-    'iiprop': '|'.join([ 'user', 'url', 'mime' ]),
+    'prop': 'info|revisions|imageinfo',
+    'intoken': 'edit',
+    'rvprop': 'content',
+    'iiprop': 'user|url|mime',
     'generator': 'categorymembers',
     'gcmtitle': config.CATEGORY,
   })['query']['pages']
@@ -29,75 +30,69 @@ images = {
   'image/gif': [],
 }
 
-# download & sort
-for (pageid, image) in pages.items():
-  if not 'imageinfo' in image:
-    continue
-  imageinfo = image['imageinfo'][0]
+optimisers = {
+  'image/png': [[config.OPTIPNG] + config.OPTIPNG_OPTIONS, [config.ZOPFLIPNG, '-y', '--prefix'] + config.ZOPFLIPNG_OPTIONS],
+  'image/gif': [[config.GIFSICLE, '--batch'] + config.GIFSICLE_OPTIONS],
+  'image/jpeg': [[config.JPEGOPTIM] + config.JPEGOPTIM_OPTIONS],
+}
+
+def work(page):
+  if not 'imageinfo' in page:
+    return
+  imageinfo = page['imageinfo'][0]
   url = imageinfo['url']
   sys.stderr.write('Fetching %s...\n' % url)
   r = requests.get(url, stream=True)
 
-  f = tempfile.NamedTemporaryFile(suffix=os.path.splitext(image['title'])[1], delete=False)
-  shutil.copyfileobj(r.raw, f)
-  del r
+  with tempfile.NamedTemporaryFile(suffix=os.path.splitext(page['title'])[1]) as f:
+    shutil.copyfileobj(r.raw, f)
+    del r
 
-  images[imageinfo['mime']].append((image, f.name))
+    images[imageinfo['mime']].append((page, f.name))
 
-# optimize
+    # optimise
+    for optimiser in optimisers[imageinfo['mime']]:
+      if subprocess.call(optimiser + [f.name]):
+        raise Error("Optimising %s failed" % f.name)
 
-for mime in images:
-  optimisers = {
-    'image/png': [[config.OPTIPNG] + config.OPTIPNG_OPTIONS, [config.ZOPFLIPNG, '-y', '--prefix'] + config.ZOPFLIPNG_OPTIONS],
-    'image/gif': [[config.GIFSICLE, '--batch'] + config.GIFSICLE_OPTIONS],
-    'image/jpeg': [[config.JPEGOPTIM] + config.JPEGOPTIM_OPTIONS],
-  }
+    REMOVE = re.compile(config.REMOVE, re.IGNORECASE)
 
-  if images[mime]:
-    sys.stderr.write('Optimising %s images\n' % mime)
-    for optimiser in optimisers[mime]:
-      print(optimiser + [image[1] for image in images[mime]])
-      if subprocess.call(optimiser + [image[1] for image in images[mime]]):
-        raise Exception('Optimising failed')
+    # upload
+    sys.stderr.write('Uploading %s to %s...\n' % (f.name, page['title']))
 
-# upload
-
-tokens = wiki.request({
-  'action': 'query',
-  'prop': 'info|revisions',
-  'rvprop': 'content',
-  'intoken': 'edit',
-  'pageids': pages.keys(),
-})['query']['pages']
-
-for mime in images:
-  for (image, f) in images[mime]:
-    sys.stderr.write('Uploading %s to %s...\n' % (f, image['title']))
-
-    pageid = str(image['pageid'])
+    page = pages[str(page['pageid'])]
     upload = wiki.request(data={
       'action': 'upload',
-      'filename': image['title'],
+      'filename': page['title'],
       'comment': config.COMMENT,
       'text': config.COMMENT,
-      'token': tokens[pageid]['edittoken'],
+      'token': page['edittoken'],
       'ignorewarnings': True,
     }, post=True, files={
-      'file': open(f, 'rb')
+      'file': open(f.name, 'rb')
     })['upload']
 
-    r = requests.get(upload['imageinfo']['descriptionurl'], params={
-      'action': 'raw'
-    })
+    os.remove(f.name)
 
-    text = re.sub(config.REMOVE, '', r.text, flags=re.I)
+    # edit
 
-    edit = wiki.request(data={
-      'action': 'edit',
-      'pageid': image['pageid'],
-      'text': text,
-      'bot': True,
-      'nocreate': True,
-      'token': tokens[pageid]['edittoken'],
-    }, post=True)
+    oldtext = page['revisions'][0]['*']
+    newtext = re.sub(REMOVE, '', oldtext)
 
+    if oldtext != newtext:
+      sys.stderr.write('Editing %s to remove compression template...\n' % page['title'])
+
+      edit = wiki.request(data={
+        'action': 'edit',
+        'pageid': page['pageid'],
+        'starttimestamp': page['starttimestamp'],
+        'text': newtext,
+        'bot': True,
+        'nocreate': True,
+        'token': tokens[pageid]['edittoken'],
+      }, post=True)
+
+pool = multiprocessing.Pool()
+pool.map(work, pages.values())
+
+# upload

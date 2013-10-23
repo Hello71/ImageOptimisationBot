@@ -1,4 +1,6 @@
-WIKI = 'http://wiki.example.com/'
+# This is a python file.
+
+WIKI = 'http://wiki.example.com/w/'
 API_PHP = WIKI + 'api.php'
 INDEX_PHP = WIKI + 'index.php'
 USERNAME = 'Image optimisation bot'
@@ -14,8 +16,10 @@ GIFSICLE_OPTIONS = ['-O3', '--no-comments', '--no-names']
 JPEGOPTIM = 'jpegoptim'
 JPEGOPTIM_OPTIONS = ['--strip-all']
 
+# Upload comment
 COMMENT = '(Automated) lossless recompression/optimisation'
 
+# Regex to remove compression template from image description page
 REMOVE = r'{{compress?(ion)?}}'
 
 # vim:ft=python:
